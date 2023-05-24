@@ -1,0 +1,152 @@
+SELECT * 
+FROM `covid-19-387713.CovidDeaths.deaths`
+WHERE continent is not null
+ORDER BY 3,4
+
+
+
+
+SELECT * 
+FROM `covid-19-387713.CovidVaccinations.vaccinations` 
+WHERE continent is not null
+ORDER BY 3,4
+
+
+-- Select Data that we are going to be using
+
+SELECT Location, date, total_cases, new_cases, total_deaths, population
+FROM `CovidDeaths.deaths`
+WHERE continent is not null
+Order by 1,2
+
+-- Looking at Total Cases vs Total Deaths
+-- Shows likelihood of dying if you contract covid in your country
+SELECT Location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 as DeathPercentage
+FROM `CovidDeaths.deaths`
+WHERE location like '%States%' AND continent is not null
+Order by 1,2
+
+-- Looking at Total Cases vs Population
+-- SHows what percentage of Population got COVID
+SELECT Location, date, total_cases, Population, (total_cases/population)*100 as PercentPopulationInfected
+FROM `CovidDeaths.deaths`
+WHERE location like '%States%'
+Order by 1,2
+
+
+-- Looking at Countries with Highest Infection Rate compared to Population
+
+SELECT Location, Population, MAX(total_cases) as HighestInfectionCount, MAX((total_cases/population))*100 as PercentPopulationInfected
+FROM `CovidDeaths.deaths`
+--WHERE location like '%States%'
+GROUP BY Location, Population
+Order by PercentPopulationInfected DESC
+
+
+-- Showing Countries with Highest Death Count per Population
+
+SELECT Location, MAX(total_deaths) as TotalDeathCount 
+FROM `CovidDeaths.deaths`
+WHERE continent is not null
+GROUP BY Location
+Order by TotalDeathCount DESC
+
+
+-- Let's Break Things Down by Continent
+
+
+
+
+-- SHowing continents with the highest death count per poplulation
+
+SELECT location, MAX(total_deaths) as TotalDeathCount 
+FROM `CovidDeaths.deaths`
+WHERE continent is not null
+GROUP BY location
+Order by TotalDeathCount DESC
+
+
+
+-- Global Numbers
+-- Used SAFE_DIVIDE and NULLIF to remove error of division by Zero.
+SELECT date, SUM(new_cases) as total_cases, SUM(new_deaths) as total_deaths, SAFE_DIVIDE(SUM(new_deaths)/NULLIF(SUM(new_cases), 0), 1)*100 as DeathPercentage
+FROM `CovidDeaths.deaths`
+WHERE continent is not null
+Group By date
+Order by 1,2
+
+
+
+
+-- Global Death Percentage
+SELECT SUM(new_cases) as total_cases, SUM(new_deaths) as total_deaths, SAFE_DIVIDE(SUM(new_deaths)/NULLIF(SUM(new_cases), 0), 1)*100 as DeathPercentage
+FROM `CovidDeaths.deaths`
+WHERE continent is not null
+--Group By date
+Order by 1,2
+
+
+-- Joining Tables
+-- Looking at total population vs vaccinations
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(vac.new_vaccinations) OVER (Partition by dea.location ORDER BY dea.location, dea.date)
+as RollingPoepleVaccinated, (RollingPoepleVaccinated/population)*100
+FROM `CovidDeaths.deaths` dea
+JOIN `covid-19-387713.CovidVaccinations.vaccinations` vac
+  ON dea.location = vac.location
+  AND dea.date = vac.date
+WHERE dea.continent is not null
+Order by 1,2,3
+
+--USE CTE
+-- cant' seem to get this to work, Syntax error: Expected keyword AS but got"(" at [1:15]")
+WITH PopvsVac (Continent, Location, Date, Population, New_vaccinations, RollingPeopleVaccinated) AS (
+  SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(vac.new_vaccinations) OVER (Partition by dea.location ORDER BY dea.location, dea.date)
+  as RollingPoepleVaccinated--, (RollingPoepleVaccinated/population)*100
+  FROM `CovidDeaths.deaths` dea
+  JOIN `covid-19-387713.CovidVaccinations.vaccinations` vac
+    ON dea.location = vac.location
+    AND dea.date = vac.date
+  WHERE dea.continent is not null
+--Order by 1,2,3
+  )
+SELECT *
+FROM PopvsVac
+
+
+
+--Temp Table
+--Error CREATE has a syntax error. Not sure if BigQuery or using the wrong function. Tried Create Table Function. Same error.
+DROP Table if exists #PercentPopulationVaccinated
+CREATE TABLE FUNCTION #PercentPopulationVaccinated
+(
+  Continent nvarchar(255),
+  Location nvarchar(255),
+  Date datetime,
+  Populaiton numeric,
+  New_vaccinations numeric,
+  RollingPoeoleVaccinated numeric
+)
+
+INSERT INTO #PercentPopulationVaccinated
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(vac.new_vaccinations) OVER (Partition by dea.location ORDER BY dea.location, dea.date)
+as RollingPoepleVaccinated--, (RollingPoepleVaccinated/population)*100
+FROM `CovidDeaths.deaths` dea
+JOIN `covid-19-387713.CovidVaccinations.vaccinations` vac
+  ON dea.location = vac.location
+  AND dea.date = vac.date
+WHERE dea.continent is not null
+--Order by 1,2,3
+
+SELECT *, (RollingPeopleVaccinated/Population)*100
+FROM #PercentPopulationVaccinated
+
+
+-- Creating view
+
+Create View Total
+SELECT location, MAX(total_deaths) as TotalDeathCount 
+FROM `CovidDeaths.deaths`
+WHERE continent is not null
+GROUP BY location
+Order by TotalDeathCount DESC
+
